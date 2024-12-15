@@ -1,0 +1,11 @@
+{
+  "id": "melons.gatekarmarandomizer",
+  "name": "Gate Karma Randomizer",
+  "version": "1.0.1",
+  "authors": "Melons",
+  "description": "A mod that customises the karma requirements for all gates in Rain World.\nNote: initial seed is randomly generated, so if you want to have a different playthrough with different gates, make sure to change it!",
+  "requirements": [],
+  "requirements_names": [],
+  "checksum_override_version": false,
+  "tags":  ["Game Modes", "Game Mechanics", "Random"]
+}
