@@ -1,11 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Reflection;
-using System.Security;
+﻿using System.Security;
 using System.Security.Permissions;
 using BepInEx;
 using BepInEx.Logging;
-using Menu.Remix;
 
 #pragma warning disable CS0618
 
@@ -14,7 +10,7 @@ using Menu.Remix;
 
 namespace GateKarmaRandomizer;
 
-[BepInPlugin("melons.gatekarmarandomizer", "Gate Karma Randomizer", "1.0.0")]
+[BepInPlugin("melons.gatekarmarandomizer", "Gate Karma Randomizer", "1.0.3")]
 public class GateKarmaRandomizer : BaseUnityPlugin
 {
 

@@ -1,4 +1,3 @@
-using HarmonyLib;
 using Menu.Remix.MixedUI;
 using UnityEngine;
 
@@ -34,21 +33,19 @@ public class GateKarmaRandomizerOptions : OptionInterface
         UIArrRandomOptions = new UIelement[]
         {
             new OpLabel(10f, 550f, "Options", true),
+
             new OpLabel(10f, 520f, "Karma RNG Seed"),
-            new OpUpdown(Seed, new Vector2(10f, 490f), 120f),
-        new OpLabel(10f, 460f, "Scug Based Seed"),
-        new OpCheckBox(ScugBasedSeed, 10f, 430f),
-        new OpLabel(10f, 400f, "Dynamic Playthrough Gate Karma"),
-        new OpCheckBox(DynamicRNG, 10f, 370f),
+            new OpUpdown(Seed, new Vector2(10f, 490f), 120f) {description = "Seed used to determine gate rng. Change it if you want a different experience than before" },
 
-        new OpLabel(10f, 300f, "Maximum Karma Requirement"),
-        new OpUpdown(MaximumKarma, new Vector2(10f, 270f), 120f) { description = "The maximum karma requirement that gates can randomly be assigned." }
+            new OpLabel(10f, 460f, "Scug Based Seed"),
+            new OpCheckBox(ScugBasedSeed, 10f, 430f) {description = "If enabled, will make campaigns have different gate requirements even with the same seed." },
+
+            new OpLabel(10f, 400f, "Dynamic Gate Karma"),
+            new OpCheckBox(DynamicRNG, 10f, 370f) {description = "If enabled, makes gate karma dynamic throughout a playthrough. (might not be as fun)" },
+
+            new OpLabel(10f, 300f, "Maximum Karma Requirement"),
+            new OpUpdown(MaximumKarma, new Vector2(10f, 270f), 120f) { description = "The maximum karma requirement that gates can randomly be assigned." }
         };
-
-        UIArrRandomOptions[2].description = "Seed used to determine gate rng. Currently there is not a way to randomize, so make sure to set one yourself";
-        UIArrRandomOptions[4].description = "If enabled, will set the seed in conjunction with the scug being played.\n" +
-                                            "Useful for different scugs having different gates without having to change the seed.";
-        UIArrRandomOptions[6].description = "If enabled, makes gate karma dynamic throughout a playthrough. (might not be as fun)";
 
         opTab.AddItems(UIArrRandomOptions);
     }

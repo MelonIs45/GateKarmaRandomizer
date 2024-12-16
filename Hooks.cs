@@ -1,29 +1,15 @@
 using BepInEx.Logging;
 using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using UnityEngine;
-using Mono.Cecil.Cil;
-using MonoMod.Cil;
-using System.Runtime.Remoting.Contexts;
 using System.Text.RegularExpressions;
-using System.Reflection;
-using IL.MoreSlugcats;
 using System.IO;
-using Menu;
-using static ExtraExtentions;
-using SlugcatSelectMenu = On.Menu.SlugcatSelectMenu;
 
 namespace GateKarmaRandomizer;
 internal class Hooks
 {
     public static ManualLogSource Logger;
     public static string CurrentSlug;
-    public static string GateRoomName;
     public static Dictionary<string, (int, int)> GateRequirements;
-
     public static int KarmaCap = 5;
     public static int MaxKarmaReq => Math.Min(KarmaCap, GateKarmaRandomizerOptions.MaximumKarma.Value);
 
@@ -40,7 +26,6 @@ internal class Hooks
         On.SaveState.LoadGame += SaveState_LoadGame;
         On.RainWorldGame.ShutDownProcess += RainWorldGameOnShutDownProcess;
         On.GameSession.ctor += GameSessionOnctor;
-
         On.RegionGate.ctor += RegionGateOnctor;
         On.RegionGate.customKarmaGateRequirements += RegionGate_customKarmaGateRequirements;
         On.HUD.Map.MapData.KarmaOfGate += MapData_KarmaOfGate;
@@ -54,8 +39,6 @@ internal class Hooks
         On.SaveState.LoadGame -= SaveState_LoadGame;
         On.RainWorldGame.ShutDownProcess -= RainWorldGameOnShutDownProcess;
         On.GameSession.ctor -= GameSessionOnctor;
-        //IL.RegionGate.ctor -= RegionGate_ctor;
-
         On.RegionGate.ctor -= RegionGateOnctor;
         On.RegionGate.customKarmaGateRequirements -= RegionGate_customKarmaGateRequirements;
         On.HUD.Map.MapData.KarmaOfGate -= MapData_KarmaOfGate;
@@ -65,7 +48,7 @@ internal class Hooks
     {
         if (save.saveStateNumber.value != "Slugpup")
         {
-            CurrentSlug = save.saveStateNumber.value; // Character playing currently
+            CurrentSlug = save.saveStateNumber.value; // Character currently being playing 
 
             if (!GateKarmaRandomizerOptions.DynamicRNG.Value)
             {
@@ -90,31 +73,17 @@ internal class Hooks
 
         Logger.LogMessage("IN SaveState_ctor");
         SetSlugName(self);
-
-        //Logger.LogMessage("Hooking Il.RegionGate_ctor");
-        //IL.RegionGate.ctor += RegionGate_ctor;
-
     }
 
     private static void RandomizeGates()
     {
         GateRequirements = new Dictionary<string, (int, int)>();
-        Logger.LogMessage($"Randomizing gates with seed: {GateKarmaRandomizerOptions.Seed.Value}, dynamicrng: {GateKarmaRandomizerOptions.DynamicRNG.Value}");
-        if (GateKarmaRandomizerOptions.Seed.Value != 0)
+        Logger.LogMessage($"Randomizing gates with seed: {GateKarmaRandomizerOptions.Seed.Value}, DynamicRNG: {GateKarmaRandomizerOptions.DynamicRNG.Value}");
+
+        UnityEngine.Random.InitState(GateKarmaRandomizerOptions.Seed.Value);
+        if (GateKarmaRandomizerOptions.ScugBasedSeed.Value)
         {
-            if (GateKarmaRandomizerOptions.ScugBasedSeed.Value)
-            {
-                UnityEngine.Random.InitState(CurrentSlug.GetHashCode() + GateKarmaRandomizerOptions.Seed.Value);
-            }
-            else
-            {
-                UnityEngine.Random.InitState(GateKarmaRandomizerOptions.Seed.Value);
-            }
-        }
-        else // If seed is 0, make it random
-        {
-            // TODO: fix this since its currently random everytime even if dynamicrng is off
-            UnityEngine.Random.InitState((int)DateTimeOffset.Now.ToUnixTimeMilliseconds());
+            UnityEngine.Random.InitState(CurrentSlug.GetHashCode() + GateKarmaRandomizerOptions.Seed.Value);
         }
 
         string[] gateRequirements = File.ReadAllLines(AssetManager.ResolveFilePath("World" + Path.DirectorySeparatorChar + "Gates" + Path.DirectorySeparatorChar + "locks.txt"));
@@ -127,7 +96,7 @@ internal class Hooks
                 int rng1 = UnityEngine.Random.Range(1, MaxKarmaReq + 1);
                 int rng2 = UnityEngine.Random.Range(1, MaxKarmaReq + 1);
 
-                // hack for underhang -> pebbles since for some reason mergedmods' gates.txt has 2 SS_UW gates
+                // Hack for underhang -> pebbles since for some reason mergedmods' gates.txt has 2 SS_UW gates
                 // even those there are is a seperate UW_SS aswell :/
                 if (!GateRequirements.ContainsKey(splitGate[0]))
                 {
@@ -141,87 +110,7 @@ internal class Hooks
         }
     }
 
-    private static void RegionGate_ctor(ILContext il)
-    {
-        ILCursor cursor = new ILCursor(il);
-        Logger.LogMessage("IN RegionGate_ctor");
-
-        cursor.GotoNext(MoveType.After,
-            i => i.MatchLdcI4(2),
-            i => i.MatchLdelemRef(),
-            i => i.MatchCallvirt(typeof(string), nameof(string.Trim)),
-            i => i.MatchLdcI4(0),
-            i => i.MatchNewobj(typeof(RegionGate.GateRequirement)
-                .GetConstructor(new[] { typeof(string), typeof(bool) })),
-            i => i.MatchStelemRef()
-        );
-
-        Logger.LogMessage("Cursor directed");
-
-        try
-        {
-            cursor.Emit(OpCodes.Ldarg_0);
-            cursor.Emit(OpCodes.Ldfld, typeof(RegionGate).GetField("karmaRequirements"));
-            cursor.Emit(OpCodes.Ldc_I4, 0);
-
-            if (!GateKarmaRandomizerOptions.DynamicRNG.Value) // Keep karma static throughout playthrough
-            {
-                // Randomises gate requirements everytime a gate is *first* loaded (i.e when joining world/travelling to new region)
-                cursor.Emit(OpCodes.Ldarg_0);
-                cursor.Emit(OpCodes.Ldfld, typeof(RegionGate).GetField("room"));
-                cursor.EmitDelegate<Func<Room, RegionGate.GateRequirement>>(currentRoom =>
-                {
-                    GateRoomName = currentRoom.abstractRoom.name;
-                    return new RegionGate.GateRequirement(GateRequirements[GateRoomName].Item1.ToString());
-                });
-                cursor.Emit(OpCodes.Stelem_Ref);
-
-                cursor.Emit(OpCodes.Ldarg_0);
-                cursor.Emit(OpCodes.Ldfld, typeof(RegionGate).GetField("karmaRequirements"));
-                cursor.Emit(OpCodes.Ldc_I4, 1);
-                cursor.Emit(OpCodes.Ldarg_0);
-                cursor.Emit(OpCodes.Ldfld, typeof(RegionGate).GetField("room"));
-                cursor.EmitDelegate<Func<Room, RegionGate.GateRequirement>>(currentRoom =>
-                {
-                    GateRoomName = currentRoom.abstractRoom.name;
-                    return new RegionGate.GateRequirement(GateRequirements[GateRoomName].Item2.ToString());
-                });
-                cursor.Emit(OpCodes.Stelem_Ref);
-            }
-            else // Make gate karma dynamic throughout session
-            {
-                // Randomises gate requirements everytime a gate is *first* loaded (i.e when joining world/travelling to new region)
-                cursor.Emit(OpCodes.Ldc_I4, 5);
-                cursor.Emit(OpCodes.Ldc_I4, 0);
-                cursor.EmitDelegate<Func<int, int, RegionGate.GateRequirement>>((min, max) =>
-                {
-                    var rng1 = UnityEngine.Random.Range(min, max);
-                    return new RegionGate.GateRequirement(rng1.ToString());
-
-                });
-                cursor.Emit(OpCodes.Stelem_Ref);
-
-                cursor.Emit(OpCodes.Ldarg_0);
-                cursor.Emit(OpCodes.Ldfld, typeof(RegionGate).GetField("karmaRequirements"));
-                cursor.Emit(OpCodes.Ldc_I4, 1);
-                cursor.Emit(OpCodes.Ldc_I4, 5);
-                cursor.Emit(OpCodes.Ldc_I4, 0);
-                cursor.EmitDelegate<Func<int, int, RegionGate.GateRequirement>>((min, max) =>
-                {
-                    var rng2 = UnityEngine.Random.Range(min, max);
-                    return new RegionGate.GateRequirement(rng2.ToString());
-                });
-                cursor.Emit(OpCodes.Stelem_Ref);
-            }
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex);
-        }
-    }
-
-
-    //randomizes the gate lock if DynamicRNG is enabled
+    // Randomizes the gate lock if DynamicRNG is enabled
     private static void RegionGateOnctor(On.RegionGate.orig_ctor orig, RegionGate self, Room room)
     {
         if (GateKarmaRandomizerOptions.DynamicRNG.Value)
@@ -237,12 +126,12 @@ internal class Hooks
         orig(self, room);
     }
 
-    //alters gate locks without manually merging changes into locks.txt
+    // Alters gate locks without manually merging changes into locks.txt
     public static void RegionGate_customKarmaGateRequirements(On.RegionGate.orig_customKarmaGateRequirements orig, RegionGate self)
     {
         orig(self);
 
-        //alter gate locks
+        // Alter gate locks
         if (GateRequirements.TryGetValue(self.room.abstractRoom.name, out var reqs))
         {
             self.karmaRequirements[0].value = reqs.Item1.ToString();
@@ -252,7 +141,7 @@ internal class Hooks
 
     }
 
-    //alters the map symbols, again without manually merging locks.txt
+    // Alters the map symbols, again without manually merging locks.txt
     public static RegionGate.GateRequirement MapData_KarmaOfGate(On.HUD.Map.MapData.orig_KarmaOfGate orig, HUD.Map.MapData self, PlayerProgression progression, World initWorld, string roomName)
     {
         RegionGate.GateRequirement origRequirement = orig(self, progression, initWorld, roomName);
@@ -273,12 +162,9 @@ internal class Hooks
                 }
             }
 
-            //correct karma value
-            if (Region.EquivalentRegion(Regex.Split(roomName, "_")[1], initWorld.region.name) != mapSwapped)
-            {
-                origRequirement.value = reqs.Item1.ToString();
-            }
-            else
+            origRequirement.value = reqs.Item1.ToString();
+            // Correct karma value
+            if (Region.EquivalentRegion(Regex.Split(roomName, "_")[1], initWorld.region.name) == mapSwapped)
             {
                 origRequirement.value = reqs.Item2.ToString();
             }
@@ -297,14 +183,13 @@ internal class Hooks
         Logger.LogDebug("IN RainWorld_OnModsInit");
         MachineConnector.SetRegisteredOI("melons.gatekarmarandomizer", new GateKarmaRandomizerOptions());
 
-        //set the karma cap according to currently applied mods
-        //this can probably go in PostModsInit, too... or SaveState_ctor... it doesn't really matter
+        // Set the karma cap according to currently applied mods
         KarmaCap = 5;
         foreach (ModManager.Mod mod in ModManager.ActiveMods)
         {
-            if (mod.id == "rwmodding.coreorg.rk") //Region Kit
+            if (mod.id == "rwmodding.coreorg.rk") // Region Kit
                 KarmaCap = Math.Max(KarmaCap, 10);
-            else if (mod.id == "LazyCowboy.KarmaExpansion")
+            else if (mod.id == "LazyCowboy.KarmaExpansion") // Karma Expansion
                 KarmaCap = Math.Max(KarmaCap, 22);
         }
     }
