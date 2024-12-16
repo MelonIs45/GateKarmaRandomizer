@@ -1,4 +1,4 @@
-﻿using HarmonyLib;
+using HarmonyLib;
 using Menu.Remix.MixedUI;
 using UnityEngine;
 
@@ -9,11 +9,16 @@ public class GateKarmaRandomizerOptions : OptionInterface
     public static Configurable<int> Seed;
     public static Configurable<bool> ScugBasedSeed;
     public static Configurable<bool> DynamicRNG;
+
+    public static Configurable<int> MaximumKarma;
+
     public GateKarmaRandomizerOptions()
     {
         Seed = this.config.Bind<int>("Seed", UnityEngine.Random.Range(0, int.MaxValue), new ConfigAcceptableRange<int>(0, int.MaxValue));
         ScugBasedSeed = this.config.Bind<bool>("ScugBasedRNG", true);
         DynamicRNG = this.config.Bind<bool>("RandomKarmaPerSession", false);
+
+        MaximumKarma = this.config.Bind<int>("MaximumKarma", 5, new ConfigAcceptableRange<int>(1, 22));
     }
 
     private UIelement[] UIArrRandomOptions;
@@ -34,7 +39,10 @@ public class GateKarmaRandomizerOptions : OptionInterface
         new OpLabel(10f, 460f, "Scug Based Seed"),
         new OpCheckBox(ScugBasedSeed, 10f, 430f),
         new OpLabel(10f, 400f, "Dynamic Playthrough Gate Karma"),
-        new OpCheckBox(DynamicRNG, 10f, 370f)
+        new OpCheckBox(DynamicRNG, 10f, 370f),
+
+        new OpLabel(10f, 300f, "Maximum Karma Requirement"),
+        new OpUpdown(MaximumKarma, new Vector2(10f, 270f), 120f) { description = "The maximum karma requirement that gates can randomly be assigned." }
         };
 
         UIArrRandomOptions[2].description = "Seed used to determine gate rng. Currently there is not a way to randomize, so make sure to set one yourself";

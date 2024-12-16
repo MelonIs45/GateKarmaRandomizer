@@ -1,4 +1,4 @@
-﻿using BepInEx.Logging;
+using BepInEx.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -24,6 +24,9 @@ internal class Hooks
     public static string GateRoomName;
     public static Dictionary<string, (int, int)> GateRequirements;
 
+    public static int KarmaCap = 5;
+    public static int MaxKarmaReq => Math.Min(KarmaCap, GateKarmaRandomizerOptions.MaximumKarma.Value);
+
     static bool IsInit;
 
     public static void Apply(ManualLogSource logger)
@@ -37,6 +40,10 @@ internal class Hooks
         On.SaveState.LoadGame += SaveState_LoadGame;
         On.RainWorldGame.ShutDownProcess += RainWorldGameOnShutDownProcess;
         On.GameSession.ctor += GameSessionOnctor;
+
+        On.RegionGate.ctor += RegionGateOnctor;
+        On.RegionGate.customKarmaGateRequirements += RegionGate_customKarmaGateRequirements;
+        On.HUD.Map.MapData.KarmaOfGate += MapData_KarmaOfGate;
     }
 
     public static void Unapply()
@@ -47,7 +54,11 @@ internal class Hooks
         On.SaveState.LoadGame -= SaveState_LoadGame;
         On.RainWorldGame.ShutDownProcess -= RainWorldGameOnShutDownProcess;
         On.GameSession.ctor -= GameSessionOnctor;
-        IL.RegionGate.ctor -= RegionGate_ctor;
+        //IL.RegionGate.ctor -= RegionGate_ctor;
+
+        On.RegionGate.ctor -= RegionGateOnctor;
+        On.RegionGate.customKarmaGateRequirements -= RegionGate_customKarmaGateRequirements;
+        On.HUD.Map.MapData.KarmaOfGate -= MapData_KarmaOfGate;
     }
 
     private static void SetSlugName(SaveState save)
@@ -80,8 +91,8 @@ internal class Hooks
         Logger.LogMessage("IN SaveState_ctor");
         SetSlugName(self);
 
-        Logger.LogMessage("Hooking Il.RegionGate_ctor");
-        IL.RegionGate.ctor += RegionGate_ctor;
+        //Logger.LogMessage("Hooking Il.RegionGate_ctor");
+        //IL.RegionGate.ctor += RegionGate_ctor;
 
     }
 
@@ -113,8 +124,8 @@ internal class Hooks
             for (int i = 0; i < gateRequirements.Length; ++i)
             {
                 string[] splitGate = Regex.Split(gateRequirements[i], " : ");
-                int rng1 = UnityEngine.Random.Range(1, 6);
-                int rng2 = UnityEngine.Random.Range(1, 6);
+                int rng1 = UnityEngine.Random.Range(1, MaxKarmaReq + 1);
+                int rng2 = UnityEngine.Random.Range(1, MaxKarmaReq + 1);
 
                 // hack for underhang -> pebbles since for some reason mergedmods' gates.txt has 2 SS_UW gates
                 // even those there are is a seperate UW_SS aswell :/
@@ -209,6 +220,74 @@ internal class Hooks
         }
     }
 
+
+    //randomizes the gate lock if DynamicRNG is enabled
+    private static void RegionGateOnctor(On.RegionGate.orig_ctor orig, RegionGate self, Room room)
+    {
+        if (GateKarmaRandomizerOptions.DynamicRNG.Value)
+        {
+            var reqs = (UnityEngine.Random.Range(1, MaxKarmaReq + 1), UnityEngine.Random.Range(1, MaxKarmaReq + 1));
+            string gateName = room.abstractRoom.name;
+            if (GateRequirements.ContainsKey(gateName))
+                GateRequirements[gateName] = reqs;
+            else
+                GateRequirements.Add(gateName, reqs);
+        }
+
+        orig(self, room);
+    }
+
+    //alters gate locks without manually merging changes into locks.txt
+    public static void RegionGate_customKarmaGateRequirements(On.RegionGate.orig_customKarmaGateRequirements orig, RegionGate self)
+    {
+        orig(self);
+
+        //alter gate locks
+        if (GateRequirements.TryGetValue(self.room.abstractRoom.name, out var reqs))
+        {
+            self.karmaRequirements[0].value = reqs.Item1.ToString();
+            self.karmaRequirements[1].value = reqs.Item2.ToString();
+            Logger.LogDebug("Set custom gate locks for " + self.room.abstractRoom.name + ": " + reqs.Item1 + ", " + reqs.Item2);
+        }
+
+    }
+
+    //alters the map symbols, again without manually merging locks.txt
+    public static RegionGate.GateRequirement MapData_KarmaOfGate(On.HUD.Map.MapData.orig_KarmaOfGate orig, HUD.Map.MapData self, PlayerProgression progression, World initWorld, string roomName)
+    {
+        RegionGate.GateRequirement origRequirement = orig(self, progression, initWorld, roomName);
+
+        if (GateRequirements.TryGetValue(roomName, out var reqs)
+            && origRequirement != null && origRequirement?.value != null)
+        {
+            //look through locks file to figure out if mapswapped or not
+            bool mapSwapped = false;
+            foreach (string line in progression.karmaLocks)
+            {
+                string[] data = Regex.Split(line, " : ");
+                if (data[0] == roomName)
+                {
+                    if (data.Length >= 4 && data[3] == "SWAPMAPSYMBOL")
+                        mapSwapped = true;
+                    break;
+                }
+            }
+
+            //correct karma value
+            if (Region.EquivalentRegion(Regex.Split(roomName, "_")[1], initWorld.region.name) != mapSwapped)
+            {
+                origRequirement.value = reqs.Item1.ToString();
+            }
+            else
+            {
+                origRequirement.value = reqs.Item2.ToString();
+            }
+        }
+
+        return origRequirement;
+    }
+
+
     private static void RainWorld_OnModsInit(On.RainWorld.orig_OnModsInit orig, RainWorld self)
     {
         orig(self);
@@ -218,7 +297,16 @@ internal class Hooks
         Logger.LogDebug("IN RainWorld_OnModsInit");
         MachineConnector.SetRegisteredOI("melons.gatekarmarandomizer", new GateKarmaRandomizerOptions());
 
-
+        //set the karma cap according to currently applied mods
+        //this can probably go in PostModsInit, too... or SaveState_ctor... it doesn't really matter
+        KarmaCap = 5;
+        foreach (ModManager.Mod mod in ModManager.ActiveMods)
+        {
+            if (mod.id == "rwmodding.coreorg.rk") //Region Kit
+                KarmaCap = Math.Max(KarmaCap, 10);
+            else if (mod.id == "LazyCowboy.KarmaExpansion")
+                KarmaCap = Math.Max(KarmaCap, 22);
+        }
     }
     private static void RainWorld_PostModsInit(On.RainWorld.orig_PostModsInit orig, RainWorld self)
     {
