@@ -8,7 +8,6 @@ public class GateKarmaRandomizerOptions : OptionInterface
     public static Configurable<int> Seed;
     public static Configurable<bool> ScugBasedSeed;
     public static Configurable<bool> DynamicRNG;
-
     public static Configurable<int> MaximumKarma;
 
     public GateKarmaRandomizerOptions()

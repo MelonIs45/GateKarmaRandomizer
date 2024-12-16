@@ -13,7 +13,7 @@ internal class Hooks
     public static int KarmaCap = 5;
     public static int MaxKarmaReq => Math.Min(KarmaCap, GateKarmaRandomizerOptions.MaximumKarma.Value);
 
-    static bool IsInit;
+    private static bool IsInit;
 
     public static void Apply(ManualLogSource logger)
     {
