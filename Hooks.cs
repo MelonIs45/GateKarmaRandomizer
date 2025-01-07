@@ -11,6 +11,8 @@ internal class Hooks
     public static string CurrentSlug;
     public static Dictionary<string, (int, int)> GateRequirements;
     public static int KarmaCap = 5;
+    public const int RegionKitMaxKarma = 10;
+    public const int KarmaExpansionMaxKarma = 34;
     public static int MaxKarmaReq => Math.Min(KarmaCap, GateKarmaRandomizerOptions.MaximumKarma.Value);
 
     private static bool IsInit;
@@ -188,9 +190,9 @@ internal class Hooks
         foreach (ModManager.Mod mod in ModManager.ActiveMods)
         {
             if (mod.id == "rwmodding.coreorg.rk") // Region Kit
-                KarmaCap = Math.Max(KarmaCap, 10);
+                KarmaCap = Math.Max(KarmaCap, RegionKitMaxKarma);
             else if (mod.id == "LazyCowboy.KarmaExpansion") // Karma Expansion
-                KarmaCap = Math.Max(KarmaCap, 22);
+                KarmaCap = Math.Max(KarmaCap, KarmaExpansionMaxKarma);
         }
     }
     private static void RainWorld_PostModsInit(On.RainWorld.orig_PostModsInit orig, RainWorld self)
