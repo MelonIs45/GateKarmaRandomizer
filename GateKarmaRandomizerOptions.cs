@@ -16,7 +16,7 @@ public class GateKarmaRandomizerOptions : OptionInterface
         ScugBasedSeed = this.config.Bind<bool>("ScugBasedRNG", true);
         DynamicRNG = this.config.Bind<bool>("RandomKarmaPerSession", false);
 
-        MaximumKarma = this.config.Bind<int>("MaximumKarma", 5, new ConfigAcceptableRange<int>(1, 22));
+        MaximumKarma = this.config.Bind<int>("MaximumKarma", 5, new ConfigAcceptableRange<int>(1, Hooks.KarmaExpansionMaxKarma)); // TODO: Should be dynamic using Hooks.KarmaCap so its not dependent on KE
     }
 
     private UIelement[] UIArrRandomOptions;

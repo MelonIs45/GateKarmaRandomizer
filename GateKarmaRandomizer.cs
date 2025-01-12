@@ -10,7 +10,7 @@ using BepInEx.Logging;
 
 namespace GateKarmaRandomizer;
 
-[BepInPlugin("melons.gatekarmarandomizer", "Gate Karma Randomizer", "1.0.3")]
+[BepInPlugin("melons.gatekarmarandomizer", "Gate Karma Randomizer", "1.0.4")]
 public class GateKarmaRandomizer : BaseUnityPlugin
 {
 
