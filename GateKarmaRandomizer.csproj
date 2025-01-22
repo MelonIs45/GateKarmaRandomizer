@@ -78,6 +78,10 @@
     </Reference>
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="GateKarmaRandomizer\modify\world\" />
+  </ItemGroup>
+
   <Target Name="PostBuild" AfterTargets="PostBuildEvent">
     <Exec Command="copy /Y &quot;$(TargetPath)&quot; &quot;C:\Users\ryanp\Documents\CS\Personal\GateKarmaRandomizerMod\GateKarmaRandomizer\plugins&quot;" />
   </Target>
