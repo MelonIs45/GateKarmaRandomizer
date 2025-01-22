@@ -2,6 +2,7 @@
 using System.Security.Permissions;
 using BepInEx;
 using BepInEx.Logging;
+using RainMeadowCompat;
 
 #pragma warning disable CS0618
 
@@ -10,7 +11,7 @@ using BepInEx.Logging;
 
 namespace GateKarmaRandomizer;
 
-[BepInPlugin("melons.gatekarmarandomizer", "Gate Karma Randomizer", "1.0.4")]
+[BepInPlugin("melons.gatekarmarandomizer", "Gate Karma Randomizer", "1.0.5")]
 public class GateKarmaRandomizer : BaseUnityPlugin
 {
 
@@ -24,6 +25,8 @@ public class GateKarmaRandomizer : BaseUnityPlugin
 
         Logger = base.Logger;
         Hooks.Apply(Logger);
+
+        SafeMeadowInterface.InitializeMeadowCompatibility();
         
         Logger.LogDebug("IN OnEnable");
     }
@@ -33,6 +36,8 @@ public class GateKarmaRandomizer : BaseUnityPlugin
         if (!IsEnabled) return;
 
         Hooks.Unapply();
+
+        SafeMeadowInterface.RemoveHooks();
 
         Logger.LogDebug("In OnDisable");
     }

@@ -3,13 +3,14 @@ using System;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using System.IO;
+using RainMeadowCompat;
 
 namespace GateKarmaRandomizer;
 internal class Hooks
 {
     public static ManualLogSource Logger;
     public static string CurrentSlug;
-    public static Dictionary<string, (int, int)> GateRequirements;
+    public static Dictionary<string, (int, int)> GateRequirements = new();
     public static int KarmaCap = 5;
     public const int RegionKitMaxKarma = 10;
     public const int KarmaExpansionMaxKarma = 34;
@@ -79,7 +80,7 @@ internal class Hooks
 
     private static void RandomizeGates()
     {
-        GateRequirements = new Dictionary<string, (int, int)>();
+        //GateRequirements = new Dictionary<string, (int, int)>();
         Logger.LogMessage($"Randomizing gates with seed: {GateKarmaRandomizerOptions.Seed.Value}, DynamicRNG: {GateKarmaRandomizerOptions.DynamicRNG.Value}");
 
         UnityEngine.Random.InitState(GateKarmaRandomizerOptions.Seed.Value);
@@ -110,6 +111,8 @@ internal class Hooks
         {
             Logger.LogError(e);
         }
+
+        SafeMeadowInterface.UpdateRandomizerData();
     }
 
     // Randomizes the gate lock if DynamicRNG is enabled
@@ -122,7 +125,10 @@ internal class Hooks
             if (GateRequirements.ContainsKey(gateName))
                 GateRequirements[gateName] = reqs;
             else
+            {
                 GateRequirements.Add(gateName, reqs);
+                SafeMeadowInterface.UpdateRandomizerData();
+            }
         }
 
         orig(self, room);
@@ -133,14 +139,20 @@ internal class Hooks
     {
         orig(self);
 
-        // Alter gate locks
-        if (GateRequirements.TryGetValue(self.room.abstractRoom.name, out var reqs))
+        try
         {
-            self.karmaRequirements[0].value = reqs.Item1.ToString();
-            self.karmaRequirements[1].value = reqs.Item2.ToString();
-            Logger.LogDebug("Set custom gate locks for " + self.room.abstractRoom.name + ": " + reqs.Item1 + ", " + reqs.Item2);
+            // Alter gate locks
+            if (GateRequirements.TryGetValue(self.room.abstractRoom.name, out var reqs))
+            {
+                self.karmaRequirements[0].value = Math.Min(reqs.Item1, MaxKarmaReq).ToString();
+                self.karmaRequirements[1].value = Math.Min(reqs.Item2, MaxKarmaReq).ToString();
+                Logger.LogDebug("Set custom gate locks for " + self.room.abstractRoom.name + ": " + reqs.Item1 + ", " + reqs.Item2);
+            }
         }
-
+        catch (Exception ex)
+        {
+            Logger.LogError(ex);
+        }
     }
 
     // Alters the map symbols, again without manually merging locks.txt
@@ -148,28 +160,35 @@ internal class Hooks
     {
         RegionGate.GateRequirement origRequirement = orig(self, progression, initWorld, roomName);
 
-        if (GateRequirements.TryGetValue(roomName, out var reqs)
-            && origRequirement != null && origRequirement?.value != null)
+        try
         {
-            //look through locks file to figure out if mapswapped or not
-            bool mapSwapped = false;
-            foreach (string line in progression.karmaLocks)
+            if (GateRequirements.TryGetValue(roomName, out var reqs)
+                && origRequirement != null && origRequirement?.value != null)
             {
-                string[] data = Regex.Split(line, " : ");
-                if (data[0] == roomName)
+                //look through locks file to figure out if mapswapped or not
+                bool mapSwapped = false;
+                foreach (string line in progression.karmaLocks)
                 {
-                    if (data.Length >= 4 && data[3] == "SWAPMAPSYMBOL")
-                        mapSwapped = true;
-                    break;
+                    string[] data = Regex.Split(line, " : ");
+                    if (data[0] == roomName)
+                    {
+                        if (data.Length >= 4 && data[3] == "SWAPMAPSYMBOL")
+                            mapSwapped = true;
+                        break;
+                    }
+                }
+
+                origRequirement.value = Math.Min(reqs.Item1, MaxKarmaReq).ToString();
+                // Correct karma value
+                if (Region.EquivalentRegion(Regex.Split(roomName, "_")[1], initWorld.region.name) == mapSwapped)
+                {
+                    origRequirement.value = Math.Min(reqs.Item2, MaxKarmaReq).ToString();
                 }
             }
-
-            origRequirement.value = reqs.Item1.ToString();
-            // Correct karma value
-            if (Region.EquivalentRegion(Regex.Split(roomName, "_")[1], initWorld.region.name) == mapSwapped)
-            {
-                origRequirement.value = reqs.Item2.ToString();
-            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex);
         }
 
         return origRequirement;
@@ -220,6 +239,8 @@ internal class Hooks
         //If you have any collections (lists, dictionaries, etc.)
         //Clear them here to prevent a memory leak
         //YourList.Clear();
+        GateRequirements.Clear(); //literally the whole purpose of this function is to clear static dictionaries
+        //not that it really matters... the game's closing anyway
     }
 
     #endregion
