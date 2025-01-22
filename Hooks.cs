@@ -10,7 +10,7 @@ internal class Hooks
 {
     public static ManualLogSource Logger;
     public static string CurrentSlug;
-    public static Dictionary<string, (int, int)> GateRequirements;
+    public static Dictionary<string, (int, int)> GateRequirements = new();
     public static int KarmaCap = 5;
     public const int RegionKitMaxKarma = 10;
     public const int KarmaExpansionMaxKarma = 34;
@@ -80,7 +80,7 @@ internal class Hooks
 
     private static void RandomizeGates()
     {
-        GateRequirements = new Dictionary<string, (int, int)>();
+        //GateRequirements = new Dictionary<string, (int, int)>();
         Logger.LogMessage($"Randomizing gates with seed: {GateKarmaRandomizerOptions.Seed.Value}, DynamicRNG: {GateKarmaRandomizerOptions.DynamicRNG.Value}");
 
         UnityEngine.Random.InitState(GateKarmaRandomizerOptions.Seed.Value);
