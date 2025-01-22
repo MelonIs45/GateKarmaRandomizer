@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using System.IO;
+using RainMeadowCompat;
 
 namespace GateKarmaRandomizer;
 internal class Hooks
@@ -110,6 +111,8 @@ internal class Hooks
         {
             Logger.LogError(e);
         }
+
+        SafeMeadowInterface.UpdateRandomizerData();
     }
 
     // Randomizes the gate lock if DynamicRNG is enabled
@@ -122,7 +125,10 @@ internal class Hooks
             if (GateRequirements.ContainsKey(gateName))
                 GateRequirements[gateName] = reqs;
             else
+            {
                 GateRequirements.Add(gateName, reqs);
+                SafeMeadowInterface.UpdateRandomizerData();
+            }
         }
 
         orig(self, room);
@@ -233,6 +239,8 @@ internal class Hooks
         //If you have any collections (lists, dictionaries, etc.)
         //Clear them here to prevent a memory leak
         //YourList.Clear();
+        GateRequirements.Clear(); //literally the whole purpose of this function is to clear static dictionaries
+        //not that it really matters... the game's closing anyway
     }
 
     #endregion
