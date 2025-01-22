@@ -81,6 +81,7 @@ internal class Hooks
     private static void RandomizeGates()
     {
         //GateRequirements = new Dictionary<string, (int, int)>();
+        GateRequirements.Clear();
         Logger.LogMessage($"Randomizing gates with seed: {GateKarmaRandomizerOptions.Seed.Value}, DynamicRNG: {GateKarmaRandomizerOptions.DynamicRNG.Value}");
 
         UnityEngine.Random.InitState(GateKarmaRandomizerOptions.Seed.Value);
