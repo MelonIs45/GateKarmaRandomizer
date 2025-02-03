@@ -3,7 +3,20 @@ using System;
 using System.Collections.Generic;
 using System.Text.RegularExpressions;
 using System.IO;
+using MonoMod.RuntimeDetour;
 using RainMeadowCompat;
+using System.Reflection;
+using MoreSlugcats;
+using System.Globalization;
+using System.Linq;
+using DevInterface;
+using Expedition;
+using HUD;
+using Menu;
+using static ExtraExtentions;
+using HarmonyLib;
+using Mono.Cecil.Cil;
+using MonoMod.Cil;
 
 namespace GateKarmaRandomizer;
 internal class Hooks
@@ -31,7 +44,9 @@ internal class Hooks
         On.GameSession.ctor += GameSessionOnctor;
         On.RegionGate.ctor += RegionGateOnctor;
         On.RegionGate.customKarmaGateRequirements += RegionGate_customKarmaGateRequirements;
+        On.RegionGate.customOEGateRequirements += RegionGate_customOEGateRequirements;
         On.HUD.Map.MapData.KarmaOfGate += MapData_KarmaOfGate;
+        On.HUD.Map.ctor += Map_ctor;
     }
 
     public static void Unapply()
@@ -44,7 +59,9 @@ internal class Hooks
         On.GameSession.ctor -= GameSessionOnctor;
         On.RegionGate.ctor -= RegionGateOnctor;
         On.RegionGate.customKarmaGateRequirements -= RegionGate_customKarmaGateRequirements;
+        On.RegionGate.customOEGateRequirements -= RegionGate_customOEGateRequirements;
         On.HUD.Map.MapData.KarmaOfGate -= MapData_KarmaOfGate;
+        On.HUD.Map.ctor -= Map_ctor;
     }
 
     private static void SetSlugName(SaveState save)
@@ -77,7 +94,6 @@ internal class Hooks
         Logger.LogMessage("IN SaveState_ctor");
         SetSlugName(self);
     }
-
     private static void RandomizeGates()
     {
         //GateRequirements = new Dictionary<string, (int, int)>();
@@ -215,6 +231,83 @@ internal class Hooks
                 KarmaCap = Math.Max(KarmaCap, KarmaExpansionMaxKarma);
         }
     }
+
+    // Doesn't make the outer expanse gate icons red
+    public static bool RegionGate_customOEGateRequirements(On.RegionGate.orig_customOEGateRequirements orig, RegionGate self)
+    {
+        if (self.karmaRequirements[0] != MoreSlugcatsEnums.GateRequirement.OELock && self.karmaRequirements[1] != MoreSlugcatsEnums.GateRequirement.OELock)
+            return true;
+        return orig(self);
+    }
+
+    public static void Map_ctor(On.HUD.Map.orig_ctor orig, Map self, HUD.HUD hud, Map.MapData mapData)
+    {
+        // Remove oe karma lock
+
+        //orig(self, hud, mapData);
+        SaveState saveState = null;
+
+        if (hud.owner.GetOwnerType() == HUD.HUD.OwnerType.Player ||
+            hud.owner.GetOwnerType() == HUD.HUD.OwnerType.FastTravelScreen ||
+            hud.owner.GetOwnerType() == HUD.HUD.OwnerType.RegionOverview ||
+            ModManager.MSC && hud.owner.GetOwnerType() == MoreSlugcatsEnums.OwnerType.SafariOverseer)
+        {
+            saveState = hud.rainWorld.progression.currentSaveState;
+        }
+        else if (hud.owner.GetOwnerType() != HUD.HUD.OwnerType.RegionOverview)
+        {
+            saveState = (hud.owner as SleepAndDeathScreen)?.saveState;
+        }
+
+        bool originalMarkState = saveState.deathPersistentSaveData.theMark;
+
+        saveState.deathPersistentSaveData.theMark = true;
+        orig(self, hud, mapData);
+        saveState.deathPersistentSaveData.theMark = originalMarkState;
+
+        // remove old map karma
+        foreach (var item in GateRequirements)
+        {
+            Logger.LogMessage($"GAte: {item.Key}, left: {item.Value.Item1}, right: {item.Value.Item2}");
+        }
+        try
+        {
+            for (int index = 0; index < mapData.gateData.Length; ++index)
+            {
+                RegionGate.GateRequirement karma = mapData.gateData[index].karma;
+                if (ModManager.MSC)
+                {
+                    if (self.mapData.NameOfRoom(mapData.gateData[index].roomIndex) == "GATE_SB_OE")
+                    {
+
+                        if (!karma.Equals(MoreSlugcatsEnums.GateRequirement.OELock))
+                        {
+
+                            self.mapObjects.RemoveAll(marker => marker is Map.GateMarker gateMarker && gateMarker.room == mapData.gateData[index].roomIndex);
+                            if (self.RegionName != "SB")
+                            {
+                                karma = new RegionGate.GateRequirement(GateRequirements["GATE_SB_OE"].Item1.ToString());
+                            }
+                            else
+                            {
+                                Logger.LogMessage(GateRequirements.Count.ToString());
+                                karma = new RegionGate.GateRequirement(GateRequirements["GATE_SB_OE"].Item2.ToString());
+                            }
+
+                            self.mapObjects.Add((Map.MapObject)new Map.GateMarker(self,
+                                mapData.gateData[index].roomIndex, karma, true));
+                        }
+                    }
+                }
+            }
+        }
+        catch (Exception e)
+        {
+            Logger.LogError(e);
+        }
+        
+    }
+
     private static void RainWorld_PostModsInit(On.RainWorld.orig_PostModsInit orig, RainWorld self)
     {
         orig(self);
@@ -239,10 +332,49 @@ internal class Hooks
     {
         //If you have any collections (lists, dictionaries, etc.)
         //Clear them here to prevent a memory leak
-        //YourList.Clear();
-        GateRequirements.Clear(); //literally the whole purpose of this function is to clear static dictionaries
+        //GateRequirements.Clear(); // FRICK YOU 6 HOURS GONE OF MY LIFE!!!!!
         //not that it really matters... the game's closing anyway
     }
+
+    #endregion
+
+    #region Unused Code
+
+    //BindingFlags propFlags = BindingFlags.Instance | BindingFlags.Public;
+    //BindingFlags myMethodFlags = BindingFlags.Static | BindingFlags.Public;
+    //
+    //try
+    //{
+    //    Hook meetRequirementsHook = new Hook( // RegionGate.MeetRequirements get method hook
+    //        typeof(RegionGate).GetProperty("MeetRequirement", propFlags).GetGetMethod(),
+    //        typeof(Hooks).GetMethod("RegionGate_MeetRequirement_Get", myMethodFlags)
+    //    );
+    //}
+    //catch (Exception ex) { Logger.LogError(ex); }
+
+    // Thought i'd need this but turns out not, will keep incase since rain meadow metropolis gate has a bug, put above hook into RainWorld_OnModsInit
+    //
+    //public delegate bool orig_MeetRequirement(RegionGate self);
+    //public static bool RegionGate_MeetRequirement_Get(orig_MeetRequirement orig, RegionGate self)
+    //{
+    //    Logger.LogMessage("IN RegionGate_MeetRequirement_Get");
+    //    RegionGate.GateRequirement originalRequirement = self.karmaRequirements[!self.letThroughDir ? 1 : 0];
+    //    Logger.LogMessage(originalRequirement);
+
+
+    //    if (originalRequirement == MoreSlugcatsEnums.GateRequirement.RoboLock)
+    //    {
+    //        self.karmaRequirements[!self.letThroughDir ? 1 : 0] = new RegionGate.GateRequirement(GateRequirements[self.room.abstractRoom.ToString()].Item1.ToString());
+    //        Logger.LogMessage("set kr to: " + GateRequirements[self.room.abstractRoom.ToString()].Item1.ToString());
+    //        //self.karmaRequirements[!self.letThroughDir ? 1 : 0] = new RegionGate.GateRequirement("1"); // Temp value
+    //    }
+
+    //    bool result = orig(self);
+    //    Logger.LogMessage("Result: " + result);
+    //    self.karmaRequirements[!self.letThroughDir ? 1 : 0] = originalRequirement;
+
+    //    return result;
+    //}
 
     #endregion
 }
